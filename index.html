@@ -275,13 +275,18 @@
     }
 
     .cabecalho-doc {
-        height: 24mm;
         display: flex;
-        align-items: center;
-        gap: 34px;
+        flex-direction: column;
+        gap: 3mm;
         padding: 0 4mm 4mm;
         margin-bottom: 4mm;
         border-bottom: 3px solid var(--verde-escuro);
+    }
+
+    .cabecalho-linha-topo {
+        display: flex;
+        align-items: center;
+        gap: 34px;
     }
 
     .cabecalho-doc .item { font-size: 1.05rem; font-weight: 800; color: var(--text); white-space: nowrap; flex-shrink: 0; }
@@ -295,11 +300,16 @@
     }
 
     .cabecalho-doc .logo-doc {
-        height: 100%;
-        max-height: 22mm;
+        height: 20mm;
         width: auto;
         margin-left: auto;
         object-fit: contain;
+    }
+
+    .instrucao-preenchimento {
+        font-size: 0.7rem;
+        font-style: italic;
+        color: var(--text-muted);
     }
 
     .blocos-grid {
@@ -307,7 +317,7 @@
         grid-template-columns: 1fr 1fr;
         grid-template-rows: 1fr 1fr;
         gap: 4mm;
-        height: 166mm;
+        height: var(--altura-grade, 162mm);
     }
 
     .bloco {
@@ -365,6 +375,7 @@
         background: var(--verde-claro);
         color: var(--verde-escuro);
         font-weight: 700;
+        font-size: calc(var(--linha-fonte) * 0.82);
         text-align: left;
         padding-left: 2mm;
         white-space: nowrap;
@@ -492,10 +503,14 @@
     <div id="documento">
         <div class="folha-a4" id="folhaA4">
             <div class="cabecalho-doc">
-                <div class="item"><b>Cronograma:</b><span id="outTipoCronograma"></span></div>
-                <div class="item"><b>Empregador:</b><span id="outEmpregadorNome"></span></div>
-                <div class="item"><b>CPF:</b><span id="outEmpregadorCpf"></span></div>
-                <img class="logo-doc" src="https://i.imgur.com/tYP92Ct.png" alt="Logo">
+                <div class="cabecalho-linha-topo">
+                    <div class="item"><b>Cronograma:</b><span id="outTipoCronograma"></span></div>
+                    <div class="item"><b>Empregador:</b><span id="outEmpregadorNome"></span></div>
+                    <div class="item"><b>CPF:</b><span id="outEmpregadorCpf"></span></div>
+                    <img class="logo-doc" src="https://i.imgur.com/tYP92Ct.png" alt="Logo">
+                </div>
+                <div class="item item-mes"><b>Mês:</b><span id="outMesAno"></span></div>
+                <p class="instrucao-preenchimento" id="instrucaoPreenchimento"></p>
             </div>
 
             <div class="blocos-grid" id="blocosContainer"></div>
@@ -748,17 +763,16 @@
         document.getElementById('mesAno').value = `${hoje.getFullYear()}-${mm}`;
     })();
 
-    // ── Divide os dias do mês em exatamente 4 grupos (uma "semana" cada) ──
-    function distribuirDias(totalDias, partes) {
-        const base  = Math.floor(totalDias / partes);
-        const resto = totalDias % partes;
+    // ── Divide uma lista de dias em exatamente 4 grupos (uma "semana" cada) ──
+    function distribuirDias(dias, partes) {
+        const base  = Math.floor(dias.length / partes);
+        const resto = dias.length % partes;
         const grupos = [];
-        let dia = 1;
+        let indice = 0;
         for (let i = 0; i < partes; i++) {
             const tamanho = base + (i < resto ? 1 : 0);
-            const dias = [];
-            for (let n = 0; n < tamanho; n++) dias.push(dia++);
-            grupos.push(dias);
+            grupos.push(dias.slice(indice, indice + tamanho));
+            indice += tamanho;
         }
         return grupos;
     }
@@ -777,10 +791,29 @@
         }
     }
 
-    // ── Calcula altura/fonte das linhas para as 4 tabelas caberem numa A4 paisagem ──
-    function ajustarTamanhoLinha(qtd) {
-        const ALTURA_BLOCO_MM       = (166 - 4) / 2; // grade 166mm menos gap, dividido em 2 linhas
-        const ALTURA_CABECALHO_MM   = 16;             // título + linha de datas do bloco
+    // ── Mede a altura real do cabeçalho (varia conforme o conteúdo) e reserva o restante
+    //    da folha A4 pra grade de tabelas, sempre cabendo numa página só na impressão ──
+    function ajustarAlturaGrade() {
+        const folha      = document.getElementById('folhaA4');
+        const cabecalho  = document.querySelector('.cabecalho-doc');
+        const ALTURA_PAGINA_MM          = 194; // A4 paisagem (210mm) menos as margens de impressão (8mm de cada lado)
+        const MARGEM_ABAIXO_CABECALHO_MM = 4;   // igual ao margin-bottom do .cabecalho-doc
+
+        const zoomAnterior = folha.style.zoom;
+        folha.style.zoom = ''; // mede em escala real (1mm = 1mm), sem o zoom reduzido da prévia
+        const PX_POR_MM = 96 / 25.4;
+        const cabecalhoAlturaMM = cabecalho.getBoundingClientRect().height / PX_POR_MM;
+        folha.style.zoom = zoomAnterior;
+
+        const alturaGradeMM = ALTURA_PAGINA_MM - cabecalhoAlturaMM - MARGEM_ABAIXO_CABECALHO_MM;
+        document.documentElement.style.setProperty('--altura-grade', `${alturaGradeMM}mm`);
+        return alturaGradeMM;
+    }
+
+    // ── Calcula altura/fonte das linhas para as 4 tabelas caberem na grade disponível ──
+    function ajustarTamanhoLinha(qtd, alturaGradeMM) {
+        const ALTURA_BLOCO_MM       = (alturaGradeMM - 4) / 2; // grade menos gap, dividido em 2 linhas
+        const ALTURA_CABECALHO_MM   = 16;                       // título + linha de datas do bloco
         const alturaCorpoMM = ALTURA_BLOCO_MM - ALTURA_CABECALHO_MM;
 
         let alturaLinhaMM = alturaCorpoMM / qtd;
@@ -816,17 +849,31 @@
         const totalDias = new Date(ano, mes, 0).getDate();
         const tituloMes = `${MESES[mes - 1]} / ${ano}`;
 
+        // ── Remove os domingos (getDay() === 0) da lista de dias do mês ──
+        const diasUteis = [];
+        for (let d = 1; d <= totalDias; d++) {
+            if (new Date(ano, mes - 1, d).getDay() !== 0) diasUteis.push(d);
+        }
+
         document.getElementById('outTipoCronograma').textContent = tipoCronograma;
+        document.getElementById('outMesAno').textContent = tituloMes;
         document.getElementById('outEmpregadorNome').textContent = empregadorNome;
         document.getElementById('outEmpregadorCpf').textContent  = empregadorCpf;
         document.getElementById('tituloPagina').textContent = `Cronograma de ${tipoCronograma}`;
         document.getElementById('declaracaoTexto').textContent =
             `Cada funcionário(a) deve marcar/rubricar na célula do dia em que realizou a ${tipoCronograma.toLowerCase()}, ` +
             `na linha com o próprio nome, confirmando que foi ele(a) quem executou o serviço naquela data.`;
+        document.getElementById('instrucaoPreenchimento').textContent =
+            `Marque um X na célula do dia em que a ${tipoCronograma.toLowerCase()} foi realizada, na linha com o seu nome, e assine na coluna "Responsável".`;
 
-        ajustarTamanhoLinha(nomes.length);
+        // ── Precisa estar visível antes de medir a altura real do cabeçalho ──
+        document.getElementById('previewVazio').style.display = 'none';
+        document.getElementById('documento').classList.add('visivel');
 
-        const grupos = distribuirDias(totalDias, 4);
+        const alturaGradeMM = ajustarAlturaGrade();
+        ajustarTamanhoLinha(nomes.length, alturaGradeMM);
+
+        const grupos = distribuirDias(diasUteis, 4);
 
         const container = document.getElementById('blocosContainer');
         const template   = document.getElementById('templateBloco');
@@ -837,13 +884,15 @@
 
             const totalColunas = 1 + dias.length + 1; // nome + dias + responsável
             const tituloTh = clone.querySelector('.titulo-texto');
-            tituloTh.textContent = `Semana ${indiceGrupo + 1} — ${tituloMes}`;
+            tituloTh.textContent = `Semana ${indiceGrupo + 1}`;
             tituloTh.colSpan = totalColunas;
 
-            // ── Larguras fixas: nome e responsável mais largos, dias mais estreitos ──
-            const LARGURA_NOME_PCT = 16;
-            const LARGURA_RESP_PCT = 20;
-            const larguraDiaPct = (100 - LARGURA_NOME_PCT - LARGURA_RESP_PCT) / dias.length;
+            // ── Colunas de dia bem curtas (só precisam caber um X a caneta); o espaço
+            //    liberado vai principalmente pro nome (caber o nome completo do funcionário) ──
+            const larguraDiaPct    = 7;
+            const larguraRestante  = 100 - larguraDiaPct * dias.length;
+            const LARGURA_NOME_PCT = larguraRestante * 0.6;
+            const LARGURA_RESP_PCT = larguraRestante * 0.4;
 
             const colgroup = clone.querySelector('.colgroup-bloco');
             const colNome = document.createElement('col');
@@ -865,7 +914,7 @@
                 linhaDatas.appendChild(th);
             });
             const thResp = document.createElement('th');
-            thResp.textContent = 'Resp.';
+            thResp.textContent = 'Responsável';
             linhaDatas.appendChild(thResp);
 
             const tbody = clone.querySelector('tbody');
@@ -887,8 +936,6 @@
             container.appendChild(clone);
         });
 
-        document.getElementById('previewVazio').style.display = 'none';
-        document.getElementById('documento').classList.add('visivel');
         ajustarZoomPreview();
     }
 
