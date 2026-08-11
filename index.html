@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title id="tituloPagina">Cronograma de Limpeza</title>
+<link id="siteFavicon" rel="icon" type="image/png">
+<link id="siteAppleTouchIcon" rel="apple-touch-icon">
+<link id="siteManifest" rel="manifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -524,6 +527,31 @@
 </template>
 
 <script>
+    // ── Ícone de PWA (favicon, atalho na tela inicial, manifest) ──
+    (function aplicarIconePwa() {
+        const logoUri      = 'https://i.imgur.com/tYP92Ct.png';
+        const favicon      = document.getElementById('siteFavicon');
+        const touchIcon    = document.getElementById('siteAppleTouchIcon');
+        const manifestLink = document.getElementById('siteManifest');
+        if (favicon)   { favicon.href = logoUri; favicon.type = 'image/png'; }
+        if (touchIcon) touchIcon.href = logoUri;
+        if (manifestLink) {
+            const manifest = {
+                name: 'Cronograma de Limpeza',
+                short_name: 'Cronograma',
+                start_url: '.',
+                display: 'standalone',
+                background_color: '#f1f5f9',
+                theme_color: '#f1f5f9',
+                icons: [
+                    { src: logoUri, sizes: '192x192', type: 'image/png' },
+                    { src: logoUri, sizes: '512x512', type: 'image/png' }
+                ]
+            };
+            manifestLink.href = `data:application/manifest+json,${encodeURIComponent(JSON.stringify(manifest))}`;
+        }
+    })();
+
     const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
