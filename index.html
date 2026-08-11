@@ -286,7 +286,8 @@
     .cabecalho-linha-topo {
         display: flex;
         align-items: center;
-        gap: 34px;
+        gap: 24px;
+        zoom: 1;
     }
 
     .cabecalho-doc .item { font-size: 1.05rem; font-weight: 800; color: var(--text); white-space: nowrap; flex-shrink: 0; }
@@ -325,11 +326,11 @@
         border-radius: 4px;
         overflow: hidden;
         display: flex;
+        align-items: flex-start;
     }
 
     table {
         width: 100%;
-        height: 100%;
         border-collapse: collapse;
         table-layout: fixed;
     }
@@ -455,9 +456,7 @@
     <div class="campo">
         <label for="tipoCronograma">Tipo de cronograma</label>
         <select id="tipoCronograma">
-            <option value="Limpeza das Balanças" selected>Limpeza das Balanças</option>
-            <option value="Limpeza Pós-Colheita">Limpeza Pós-Colheita</option>
-            <option value="Limpeza dos Canivete">Limpeza dos Canivetes</option>
+            <option value="Limpeza Geral (Balanças, Pós-Colheita e Canivetes)" selected>Limpeza Geral (Balanças, Pós-Colheita e Canivetes)</option>
         </select>
     </div>
 
@@ -509,7 +508,6 @@
                     <div class="item"><b>CPF:</b><span id="outEmpregadorCpf"></span></div>
                     <img class="logo-doc" src="https://i.imgur.com/tYP92Ct.png" alt="Logo">
                 </div>
-                <div class="item item-mes"><b>Mês:</b><span id="outMesAno"></span></div>
                 <p class="instrucao-preenchimento" id="instrucaoPreenchimento"></p>
             </div>
 
@@ -635,13 +633,38 @@
         return { ...EMPREGADORES_PADRAO, ...carregarEmpregadorasCustom() };
     }
 
-    function montarListaFuncionarios(nomes) {
+    // ── Funcionários desmarcados pelo usuário, por empregadora (salvo no navegador) ──
+    const CHAVE_DESMARCADOS = 'cronograma_limpeza_desmarcados';
+
+    function carregarDesmarcados() {
+        try {
+            return JSON.parse(localStorage.getItem(CHAVE_DESMARCADOS)) || {};
+        } catch {
+            return {};
+        }
+    }
+
+    function salvarMarcacaoAtual() {
+        const empregadorAtual = document.getElementById('selectEmpregador').value;
+        const desmarcados = Array.from(document.querySelectorAll('.chk-funcionario'))
+            .filter(chk => !chk.checked)
+            .map(chk => chk.value);
+
+        const todos = carregarDesmarcados();
+        if (desmarcados.length) todos[empregadorAtual] = desmarcados;
+        else delete todos[empregadorAtual];
+        localStorage.setItem(CHAVE_DESMARCADOS, JSON.stringify(todos));
+    }
+
+    function montarListaFuncionarios(nomes, empregadorNome) {
         const lista = document.getElementById('listaFuncionarios');
+        const desmarcados = carregarDesmarcados()[empregadorNome] || [];
         lista.innerHTML = '';
         nomes.forEach(nome => {
+            const marcado = !desmarcados.includes(nome);
             const label = document.createElement('label');
             label.className = 'item-funcionario';
-            label.innerHTML = `<input type="checkbox" class="chk-funcionario" value="${nome}" checked> ${nome}`;
+            label.innerHTML = `<input type="checkbox" class="chk-funcionario" value="${nome}" ${marcado ? 'checked' : ''}> ${nome}`;
             lista.appendChild(label);
         });
     }
@@ -666,7 +689,7 @@
 
         document.getElementById('empregadorNome').value = nomeSelecionado;
         document.getElementById('empregadorCpf').value  = dados.cpf || '';
-        montarListaFuncionarios(dados.funcionarios);
+        montarListaFuncionarios(dados.funcionarios, nomeSelecionado);
 
         const ehPadrao = Object.prototype.hasOwnProperty.call(EMPREGADORES_PADRAO, nomeSelecionado);
         document.getElementById('btnRemoverEmpregadora').style.display = ehPadrao ? 'none' : 'inline';
@@ -683,16 +706,20 @@
 
     document.getElementById('btnMarcarTodos').addEventListener('click', () => {
         document.querySelectorAll('.chk-funcionario').forEach(chk => chk.checked = true);
+        salvarMarcacaoAtual();
         atualizarSePrevisualizando();
     });
     document.getElementById('btnDesmarcarTodos').addEventListener('click', () => {
         document.querySelectorAll('.chk-funcionario').forEach(chk => chk.checked = false);
+        salvarMarcacaoAtual();
         atualizarSePrevisualizando();
     });
 
     // ── Delegação: cobre os checkboxes mesmo depois que a lista é recriada ao trocar de empregador(a) ──
     document.getElementById('listaFuncionarios').addEventListener('change', e => {
-        if (e.target.classList.contains('chk-funcionario')) atualizarSePrevisualizando();
+        if (!e.target.classList.contains('chk-funcionario')) return;
+        salvarMarcacaoAtual();
+        atualizarSePrevisualizando();
     });
 
     document.getElementById('btnRemoverEmpregadora').addEventListener('click', () => {
@@ -701,6 +728,9 @@
         const custom = carregarEmpregadorasCustom();
         delete custom[nomeSelecionado];
         salvarEmpregadorasCustom(custom);
+        const desmarcados = carregarDesmarcados();
+        delete desmarcados[nomeSelecionado];
+        localStorage.setItem(CHAVE_DESMARCADOS, JSON.stringify(desmarcados));
         popularSelectEmpregadores(Object.keys(EMPREGADORES_PADRAO)[0]);
         aplicarEmpregadoraSelecionada();
     });
@@ -793,6 +823,16 @@
 
     // ── Mede a altura real do cabeçalho (varia conforme o conteúdo) e reserva o restante
     //    da folha A4 pra grade de tabelas, sempre cabendo numa página só na impressão ──
+    // ── Encolhe a linha "Cronograma/Empregador/CPF/logo" só o suficiente pra continuar
+    //    numa única linha, caso o texto do tipo de cronograma seja muito longo ──
+    function ajustarLinhaTopoCabecalho() {
+        const linha = document.querySelector('.cabecalho-linha-topo');
+        linha.style.zoom = '';
+        const disponivel  = linha.clientWidth;
+        const necessario  = linha.scrollWidth;
+        linha.style.zoom = necessario > disponivel ? disponivel / necessario : 1;
+    }
+
     function ajustarAlturaGrade() {
         const folha      = document.getElementById('folhaA4');
         const cabecalho  = document.querySelector('.cabecalho-doc');
@@ -856,7 +896,6 @@
         }
 
         document.getElementById('outTipoCronograma').textContent = tipoCronograma;
-        document.getElementById('outMesAno').textContent = tituloMes;
         document.getElementById('outEmpregadorNome').textContent = empregadorNome;
         document.getElementById('outEmpregadorCpf').textContent  = empregadorCpf;
         document.getElementById('tituloPagina').textContent = `Cronograma de ${tipoCronograma}`;
@@ -870,6 +909,7 @@
         document.getElementById('previewVazio').style.display = 'none';
         document.getElementById('documento').classList.add('visivel');
 
+        ajustarLinhaTopoCabecalho();
         const alturaGradeMM = ajustarAlturaGrade();
         ajustarTamanhoLinha(nomes.length, alturaGradeMM);
 
@@ -884,7 +924,7 @@
 
             const totalColunas = 1 + dias.length + 1; // nome + dias + responsável
             const tituloTh = clone.querySelector('.titulo-texto');
-            tituloTh.textContent = `Semana ${indiceGrupo + 1}`;
+            tituloTh.textContent = `Semana ${indiceGrupo + 1} — ${tituloMes}`;
             tituloTh.colSpan = totalColunas;
 
             // ── Colunas de dia bem curtas (só precisam caber um X a caneta); o espaço
